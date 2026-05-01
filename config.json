@@ -1,0 +1,71 @@
+{
+  "category_routing": {
+    "SYNTH BASS": {"target": "AudioOut/External/M1", "upper": "Ext. Out", "lower": "2"},
+    "BASS":       {"target": "AudioOut/External/M1", "upper": "Ext. Out", "lower": "2"},
+    "HOOKS":      {"target": "AudioOut/External/S1", "upper": "Ext. Out", "lower": "3/4"},
+    "BGV":        {"target": "AudioOut/External/S2", "upper": "Ext. Out", "lower": "5/6"},
+    "KEYS":       {"target": "AudioOut/External/S2", "upper": "Ext. Out", "lower": "5/6"},
+    "STRINGS":    {"target": "AudioOut/External/S2", "upper": "Ext. Out", "lower": "5/6"},
+    "GUITARS":    {"target": "AudioOut/External/S2", "upper": "Ext. Out", "lower": "5/6"},
+    "PERC":       {"target": "AudioOut/External/S3", "upper": "Ext. Out", "lower": "7/8"},
+    "PERCUSSION": {"target": "AudioOut/External/S3", "upper": "Ext. Out", "lower": "7/8"}
+  },
+  "top_level_tracks": {
+    "CLICK": {"target": "AudioOut/External/M0", "upper": "Ext. Out", "lower": "1"},
+    "GUIDE": {"target": "AudioOut/External/M0", "upper": "Ext. Out", "lower": "1"},
+    "CUES":  {"target": "AudioOut/External/M0", "upper": "Ext. Out", "lower": "1"}
+  },
+  "atonal_categories": ["PERC", "PERCUSSION"],
+  "ignored_song_groups": ["MIDI"],
+  "campuses": {
+    "Eng": {
+      "label": "English",
+      "mixer_adjustments": {
+        "BGV": [
+          {"match": "__GROUP__",    "action": "volume", "value": -10},
+          {"match": "__CHILDREN__", "action": "volume", "value": -10}
+        ],
+        "PERC": [
+          {"match": "DRUMS", "action": "mute"}
+        ],
+        "PERCUSSION": [
+          {"match": "DRUMS", "action": "mute"}
+        ],
+        "SYNTH BASS": [
+          {"match": "BASS", "action": "mute"}
+        ],
+        "BASS": [
+          {"match": "BASS", "action": "mute"}
+        ]
+      }
+    },
+    "Esp": {
+      "label": "Español",
+      "mixer_adjustments": {
+        "BGV": [
+          {"match": "__GROUP__",    "action": "mute"},
+          {"match": "__CHILDREN__", "action": "mute"}
+        ],
+        "PERC": [
+          {"match": "DRUMS", "action": "mute"}
+        ],
+        "PERCUSSION": [
+          {"match": "DRUMS", "action": "mute"}
+        ],
+        "SYNTH BASS": [
+          {"match": "BASS", "action": "mute"}
+        ],
+        "BASS": [
+          {"match": "BASS", "action": "mute"}
+        ]
+      }
+    }
+  },
+  "output_options": {
+    "1 (mono)":             {"target": "AudioOut/External/M0", "upper": "Ext. Out", "lower": "1"},
+    "2 (mono)":             {"target": "AudioOut/External/M1", "upper": "Ext. Out", "lower": "2"},
+    "3/4 (stereo)":         {"target": "AudioOut/External/S1", "upper": "Ext. Out", "lower": "3/4"},
+    "5/6 (stereo)":         {"target": "AudioOut/External/S2", "upper": "Ext. Out", "lower": "5/6"},
+    "7/8 (stereo)":         {"target": "AudioOut/External/S3", "upper": "Ext. Out", "lower": "7/8"}
+  }
+}
