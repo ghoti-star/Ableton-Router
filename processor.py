@@ -4,7 +4,6 @@ All campus/routing config is driven by config.json.
 """
 
 import gzip
-import io
 import json
 import os
 import re
@@ -16,9 +15,7 @@ import xml.etree.ElementTree as ET
 
 KEYS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 WARP_MODE_COMPLEX = 4
-
 MASTER_ROUTE = {"target": "AudioOut/Master", "upper": "Master", "lower": ""}
-
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
 # ---------------------------------------------------------------------------
@@ -247,14 +244,40 @@ def unfold_all_tracks(index):
             unfolded.set("Value", "true")
 
 # ---------------------------------------------------------------------------
+# ROUTING HELPERS
+# ---------------------------------------------------------------------------
+
+def effective_category_rule(cat_name, campus_cfg, cfg):
+    """
+    Return the routing rule for a category, respecting campus-level overrides.
+    Campus category_routing_overrides take priority over global category_routing.
+    """
+    overrides = campus_cfg.get("category_routing_overrides", {})
+    rule = next((r for k, r in overrides.items() if k.upper() == cat_name.upper()), None)
+    if rule:
+        return rule
+    return next((r for k, r in cfg["category_routing"].items()
+                 if k.upper() == cat_name.upper()), None)
+
+def effective_top_level_rules(campus_cfg, cfg):
+    """
+    Return top-level track routing for this campus.
+    Campus-level top_level_tracks override the global ones.
+    """
+    campus_tl = campus_cfg.get("top_level_tracks")
+    return campus_tl if campus_tl else cfg["top_level_tracks"]
+
+# ---------------------------------------------------------------------------
 # ROUTING PASSES
 # ---------------------------------------------------------------------------
 
 def route_standard(root, index, children_of, songs, campus_cfg,
-                   category_rules, top_level_rules, transpose_map,
-                   warnings, cfg):
+                   cfg, transpose_map, warnings):
+    """Apply campus routing, mixer adjustments, and transposition."""
     adjustments_map = campus_cfg.get("mixer_adjustments", {})
+    top_level_rules = effective_top_level_rules(campus_cfg, cfg)
 
+    # Top-level tracks (CLICK, GUIDE, CUES)
     for tid, t in index.items():
         if t["group_id"] == -1 and t["tag"] != "GroupTrack":
             rule = next((r for k, r in top_level_rules.items()
@@ -270,15 +293,22 @@ def route_standard(root, index, children_of, songs, campus_cfg,
         for cat_id in song["category_ids"]:
             cat      = index[cat_id]
             cat_name = cat["name"]
-            rule = next((r for k, r in category_rules.items()
-                         if k.upper() == cat_name.upper()), None)
+
+            rule = effective_category_rule(cat_name, campus_cfg, cfg)
             if rule is None:
                 warnings.append(f"'{song['raw_name']}' → '{cat_name}' no routing rule — untouched.")
                 continue
+
+            # Route the category group track
             set_routing(cat["elem"], rule, warnings, cat_name)
+
+            # Route children — but check if any individual child has its own override
+            # (e.g. DRUMS inside PERC routed to 7/8 while PERC group goes to 9/10)
             for child_id in children_of.get(cat_id, []):
-                child = index[child_id]
-                set_routing(child["elem"], rule, warnings, child["name"])
+                child     = index[child_id]
+                child_rule = effective_category_rule(child["name"], campus_cfg, cfg)
+                set_routing(child["elem"], child_rule or rule, warnings, child["name"])
+
             apply_mixer_adjustments(cat_name, cat["elem"], children_of,
                                     index, warnings, adjustments_map)
 
@@ -286,9 +316,8 @@ def route_standard(root, index, children_of, songs, campus_cfg,
         if new_key and new_key != song["key"]:
             transpose_song(song, new_key, index, children_of, warnings, cfg)
 
-def route_practice(root, index, children_of, songs, transpose_map,
-                   warnings, cfg):
-    # Apply transpositions first
+def route_practice(root, index, children_of, songs, transpose_map, warnings, cfg):
+    """Transpose, route everything to Master, reset volumes, unmute, expand tracks."""
     for song in songs:
         if song["ignored"]:
             continue
@@ -296,7 +325,6 @@ def route_practice(root, index, children_of, songs, transpose_map,
         if new_key and new_key != song["key"]:
             transpose_song(song, new_key, index, children_of, warnings, cfg)
 
-    # Route everything to Master
     for tid, t in index.items():
         if t["group_id"] == -1 and t["tag"] != "GroupTrack":
             set_routing(t["elem"], MASTER_ROUTE, warnings, t["name"])
@@ -327,9 +355,6 @@ def process_als(als_bytes, campus_key, transpose_map, cfg, practice=False):
     """
     Process an ALS file (as bytes).
     Returns (output_bytes, warnings).
-    campus_key: key into cfg["campuses"], e.g. "Eng"
-    transpose_map: {song_id: new_key}
-    practice: if True, route to Master instead of ext outputs
     """
     warnings = []
     root = ET.fromstring(gzip.decompress(als_bytes))
@@ -339,27 +364,20 @@ def process_als(als_bytes, campus_key, transpose_map, cfg, practice=False):
 
     index, children_of = build_track_index(tracks_elem)
     songs = identify_songs(index, children_of, cfg)
-
-    campus_cfg     = cfg["campuses"][campus_key]
-    category_rules = cfg["category_routing"]
-    top_level_rules = cfg["top_level_tracks"]
+    campus_cfg = cfg["campuses"][campus_key]
 
     if practice:
         route_practice(root, index, children_of, songs,
                        transpose_map, warnings, cfg)
     else:
         route_standard(root, index, children_of, songs,
-                       campus_cfg, category_rules, top_level_rules,
-                       transpose_map, warnings, cfg)
+                       campus_cfg, cfg, transpose_map, warnings)
 
     out_bytes = gzip.compress(
         ET.tostring(root, encoding="utf-8", xml_declaration=True))
     return out_bytes, warnings
 
 def scan_songs(als_bytes, cfg):
-    """
-    Parse an ALS file and return the list of song dicts (for the UI).
-    """
     root = ET.fromstring(gzip.decompress(als_bytes))
     tracks_elem = root.find(".//Tracks")
     if tracks_elem is None:
@@ -368,14 +386,19 @@ def scan_songs(als_bytes, cfg):
     return identify_songs(index, children_of, cfg)
 
 def scan_unknown_categories(als_bytes, cfg):
-    """Return set of category names that have no routing rule."""
+    """Return category names that have no rule in global OR any campus override."""
     root = ET.fromstring(gzip.decompress(als_bytes))
     tracks_elem = root.find(".//Tracks")
     if tracks_elem is None:
         return set()
     index, children_of = build_track_index(tracks_elem)
     songs = identify_songs(index, children_of, cfg)
+
+    # Collect all known category names across global + all campus overrides
     known = {k.upper() for k in cfg["category_routing"]}
+    for campus in cfg["campuses"].values():
+        known.update(k.upper() for k in campus.get("category_routing_overrides", {}))
+
     unknowns = set()
     for song in songs:
         if song["ignored"]:
