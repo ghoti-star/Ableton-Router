@@ -1,71 +1,504 @@
 {
   "category_routing": {
-    "SYNTH BASS": {"target": "AudioOut/External/M1", "upper": "Ext. Out", "lower": "2"},
-    "BASS":       {"target": "AudioOut/External/M1", "upper": "Ext. Out", "lower": "2"},
-    "HOOKS":      {"target": "AudioOut/External/S1", "upper": "Ext. Out", "lower": "3/4"},
-    "BGV":        {"target": "AudioOut/External/S2", "upper": "Ext. Out", "lower": "5/6"},
-    "KEYS":       {"target": "AudioOut/External/S2", "upper": "Ext. Out", "lower": "5/6"},
-    "STRINGS":    {"target": "AudioOut/External/S2", "upper": "Ext. Out", "lower": "5/6"},
-    "GUITARS":    {"target": "AudioOut/External/S2", "upper": "Ext. Out", "lower": "5/6"},
-    "PERC":       {"target": "AudioOut/External/S3", "upper": "Ext. Out", "lower": "7/8"},
-    "PERCUSSION": {"target": "AudioOut/External/S3", "upper": "Ext. Out", "lower": "7/8"}
+    "SYNTH BASS": {
+      "target": "AudioOut/External/M1",
+      "upper": "Ext. Out",
+      "lower": "2"
+    },
+    "BASS": {
+      "target": "AudioOut/External/M1",
+      "upper": "Ext. Out",
+      "lower": "2"
+    },
+    "HOOKS": {
+      "target": "AudioOut/External/S1",
+      "upper": "Ext. Out",
+      "lower": "3/4"
+    },
+    "BGV": {
+      "target": "AudioOut/External/S2",
+      "upper": "Ext. Out",
+      "lower": "5/6"
+    },
+    "KEYS": {
+      "target": "AudioOut/External/S2",
+      "upper": "Ext. Out",
+      "lower": "5/6"
+    },
+    "STRINGS": {
+      "target": "AudioOut/External/S2",
+      "upper": "Ext. Out",
+      "lower": "5/6"
+    },
+    "GUITARS": {
+      "target": "AudioOut/External/S2",
+      "upper": "Ext. Out",
+      "lower": "5/6"
+    },
+    "PERC": {
+      "target": "AudioOut/External/S3",
+      "upper": "Ext. Out",
+      "lower": "7/8"
+    },
+    "PERCUSSION": {
+      "target": "AudioOut/External/S3",
+      "upper": "Ext. Out",
+      "lower": "7/8"
+    },
+    "DUMP": {
+      "target": "AudioOut/External/S3",
+      "upper": "Ext. Out",
+      "lower": "7/8"
+    }
   },
   "top_level_tracks": {
-    "CLICK": {"target": "AudioOut/External/M0", "upper": "Ext. Out", "lower": "1"},
-    "GUIDE": {"target": "AudioOut/External/M0", "upper": "Ext. Out", "lower": "1"},
-    "CUES":  {"target": "AudioOut/External/M0", "upper": "Ext. Out", "lower": "1"}
+    "CLICK": {
+      "target": "AudioOut/External/M0",
+      "upper": "Ext. Out",
+      "lower": "1"
+    },
+    "GUIDE": {
+      "target": "AudioOut/External/M0",
+      "upper": "Ext. Out",
+      "lower": "1"
+    },
+    "CUES": {
+      "target": "AudioOut/External/M0",
+      "upper": "Ext. Out",
+      "lower": "1"
+    }
   },
-  "atonal_categories": ["PERC", "PERCUSSION"],
-  "ignored_song_groups": ["MIDI"],
+  "atonal_categories": [
+    "PERC",
+    "PERCUSSION"
+  ],
+  "ignored_song_groups": [
+    "MIDI"
+  ],
   "campuses": {
-    "Eng": {
-      "label": "English",
+    "ABC_Eng": {
+      "label": "ABC English",
       "mixer_adjustments": {
         "BGV": [
-          {"match": "__GROUP__",    "action": "volume", "value": -10},
-          {"match": "__CHILDREN__", "action": "volume", "value": -10}
+          {
+            "match": "__GROUP__",
+            "action": "volume",
+            "value": -10
+          },
+          {
+            "match": "__CHILDREN__",
+            "action": "volume",
+            "value": -10
+          }
         ],
         "PERC": [
-          {"match": "DRUMS", "action": "mute"}
+          {
+            "match": "DRUMS",
+            "action": "mute"
+          }
         ],
         "PERCUSSION": [
-          {"match": "DRUMS", "action": "mute"}
+          {
+            "match": "DRUMS",
+            "action": "mute"
+          }
         ],
         "SYNTH BASS": [
-          {"match": "BASS", "action": "mute"}
+          {
+            "match": "BASS",
+            "action": "mute"
+          }
         ],
         "BASS": [
-          {"match": "BASS", "action": "mute"}
+          {
+            "match": "BASS",
+            "action": "mute"
+          }
         ]
       }
     },
-    "Esp": {
-      "label": "Español",
+    "ABC_Esp": {
+      "label": "ABC Espa\u00f1ol",
       "mixer_adjustments": {
         "BGV": [
-          {"match": "__GROUP__",    "action": "mute"},
-          {"match": "__CHILDREN__", "action": "mute"}
+          {
+            "match": "__GROUP__",
+            "action": "mute"
+          },
+          {
+            "match": "__CHILDREN__",
+            "action": "mute"
+          }
         ],
         "PERC": [
-          {"match": "DRUMS", "action": "mute"}
+          {
+            "match": "DRUMS",
+            "action": "mute"
+          }
         ],
         "PERCUSSION": [
-          {"match": "DRUMS", "action": "mute"}
+          {
+            "match": "DRUMS",
+            "action": "mute"
+          }
         ],
         "SYNTH BASS": [
-          {"match": "BASS", "action": "mute"}
+          {
+            "match": "BASS",
+            "action": "mute"
+          }
         ],
         "BASS": [
-          {"match": "BASS", "action": "mute"}
+          {
+            "match": "BASS",
+            "action": "mute"
+          }
+        ]
+      }
+    },
+    "ABC_Stu": {
+      "label": "ABC Students",
+      "mixer_adjustments": {
+        "BGV": [
+          {
+            "match": "__GROUP__",
+            "action": "volume",
+            "value": -10
+          },
+          {
+            "match": "__CHILDREN__",
+            "action": "volume",
+            "value": -10
+          }
+        ],
+        "PERC": [
+          {
+            "match": "DRUMS",
+            "action": "mute"
+          }
+        ],
+        "PERCUSSION": [
+          {
+            "match": "DRUMS",
+            "action": "mute"
+          }
+        ],
+        "SYNTH BASS": [
+          {
+            "match": "BASS",
+            "action": "mute"
+          }
+        ],
+        "BASS": [
+          {
+            "match": "BASS",
+            "action": "mute"
+          }
+        ]
+      }
+    },
+    "Brandon_Esp": {
+      "label": "Brandon Espa\u00f1ol",
+      "top_level_tracks": {
+        "CLICK": {
+          "target": "AudioOut/External/M2",
+          "upper": "Ext. Out",
+          "lower": "3"
+        },
+        "GUIDE": {
+          "target": "AudioOut/External/M2",
+          "upper": "Ext. Out",
+          "lower": "3"
+        },
+        "CUES": {
+          "target": "AudioOut/External/M2",
+          "upper": "Ext. Out",
+          "lower": "3"
+        }
+      },
+      "category_routing_overrides": {
+        "SYNTH BASS": {
+          "target": "AudioOut/External/M3",
+          "upper": "Ext. Out",
+          "lower": "4"
+        },
+        "BASS": {
+          "target": "AudioOut/External/M3",
+          "upper": "Ext. Out",
+          "lower": "4"
+        },
+        "HOOKS": {
+          "target": "AudioOut/External/S3",
+          "upper": "Ext. Out",
+          "lower": "7/8"
+        },
+        "KEYS": {
+          "target": "AudioOut/External/S3",
+          "upper": "Ext. Out",
+          "lower": "7/8"
+        },
+        "STRINGS": {
+          "target": "AudioOut/External/S3",
+          "upper": "Ext. Out",
+          "lower": "7/8"
+        },
+        "GUITARS": {
+          "target": "AudioOut/External/S3",
+          "upper": "Ext. Out",
+          "lower": "7/8"
+        },
+        "BGV": {
+          "target": "AudioOut/External/S3",
+          "upper": "Ext. Out",
+          "lower": "7/8"
+        },
+        "PERC": {
+          "target": "AudioOut/External/S4",
+          "upper": "Ext. Out",
+          "lower": "9/10"
+        },
+        "PERCUSSION": {
+          "target": "AudioOut/External/S4",
+          "upper": "Ext. Out",
+          "lower": "9/10"
+        },
+        "DUMP": {
+          "target": "AudioOut/External/S4",
+          "upper": "Ext. Out",
+          "lower": "9/10"
+        }
+      },
+      "mixer_adjustments": {
+        "BGV": [
+          {
+            "match": "__GROUP__",
+            "action": "mute"
+          },
+          {
+            "match": "__CHILDREN__",
+            "action": "mute"
+          }
+        ],
+        "PERC": [
+          {
+            "match": "DRUMS",
+            "action": "mute"
+          }
+        ],
+        "PERCUSSION": [
+          {
+            "match": "DRUMS",
+            "action": "mute"
+          }
+        ],
+        "DUMP": [
+          {
+            "match": "DRUMS",
+            "action": "mute"
+          }
+        ],
+        "SYNTH BASS": [
+          {
+            "match": "BASS",
+            "action": "mute"
+          }
+        ],
+        "BASS": [
+          {
+            "match": "BASS",
+            "action": "mute"
+          }
+        ]
+      }
+    },
+    "Brandon_Stu": {
+      "label": "Brandon Students",
+      "top_level_tracks": {
+        "CLICK": {
+          "target": "AudioOut/External/M2",
+          "upper": "Ext. Out",
+          "lower": "3"
+        },
+        "GUIDE": {
+          "target": "AudioOut/External/M2",
+          "upper": "Ext. Out",
+          "lower": "3"
+        },
+        "CUES": {
+          "target": "AudioOut/External/M2",
+          "upper": "Ext. Out",
+          "lower": "3"
+        }
+      },
+      "category_routing_overrides": {
+        "SYNTH BASS": {
+          "target": "AudioOut/External/M3",
+          "upper": "Ext. Out",
+          "lower": "4"
+        },
+        "BASS": {
+          "target": "AudioOut/External/M3",
+          "upper": "Ext. Out",
+          "lower": "4"
+        },
+        "HOOKS": {
+          "target": "AudioOut/External/S3",
+          "upper": "Ext. Out",
+          "lower": "7/8"
+        },
+        "KEYS": {
+          "target": "AudioOut/External/S3",
+          "upper": "Ext. Out",
+          "lower": "7/8"
+        },
+        "STRINGS": {
+          "target": "AudioOut/External/S3",
+          "upper": "Ext. Out",
+          "lower": "7/8"
+        },
+        "GUITARS": {
+          "target": "AudioOut/External/S3",
+          "upper": "Ext. Out",
+          "lower": "7/8"
+        },
+        "BGV": {
+          "target": "AudioOut/External/S3",
+          "upper": "Ext. Out",
+          "lower": "7/8"
+        },
+        "PERC": {
+          "target": "AudioOut/External/S4",
+          "upper": "Ext. Out",
+          "lower": "9/10"
+        },
+        "PERCUSSION": {
+          "target": "AudioOut/External/S4",
+          "upper": "Ext. Out",
+          "lower": "9/10"
+        },
+        "DUMP": {
+          "target": "AudioOut/External/S4",
+          "upper": "Ext. Out",
+          "lower": "9/10"
+        }
+      },
+      "mixer_adjustments": {
+        "BGV": [
+          {
+            "match": "__GROUP__",
+            "action": "volume",
+            "value": -10
+          },
+          {
+            "match": "__CHILDREN__",
+            "action": "volume",
+            "value": -10
+          }
+        ],
+        "PERC": [
+          {
+            "match": "DRUMS",
+            "action": "mute"
+          }
+        ],
+        "PERCUSSION": [
+          {
+            "match": "DRUMS",
+            "action": "mute"
+          }
+        ],
+        "DUMP": [
+          {
+            "match": "DRUMS",
+            "action": "mute"
+          }
+        ],
+        "SYNTH BASS": [
+          {
+            "match": "BASS",
+            "action": "mute"
+          }
+        ],
+        "BASS": [
+          {
+            "match": "BASS",
+            "action": "mute"
+          }
+        ]
+      }
+    },
+    "Riverview_Eng": {
+      "label": "Riverview English",
+      "mixer_adjustments": {
+        "BGV": [
+          {
+            "match": "__GROUP__",
+            "action": "volume",
+            "value": -10
+          },
+          {
+            "match": "__CHILDREN__",
+            "action": "volume",
+            "value": -10
+          }
+        ],
+        "PERC": [
+          {
+            "match": "DRUMS",
+            "action": "mute"
+          }
+        ],
+        "PERCUSSION": [
+          {
+            "match": "DRUMS",
+            "action": "mute"
+          }
+        ],
+        "SYNTH BASS": [
+          {
+            "match": "BASS",
+            "action": "mute"
+          }
+        ],
+        "BASS": [
+          {
+            "match": "BASS",
+            "action": "mute"
+          }
         ]
       }
     }
   },
   "output_options": {
-    "1 (mono)":             {"target": "AudioOut/External/M0", "upper": "Ext. Out", "lower": "1"},
-    "2 (mono)":             {"target": "AudioOut/External/M1", "upper": "Ext. Out", "lower": "2"},
-    "3/4 (stereo)":         {"target": "AudioOut/External/S1", "upper": "Ext. Out", "lower": "3/4"},
-    "5/6 (stereo)":         {"target": "AudioOut/External/S2", "upper": "Ext. Out", "lower": "5/6"},
-    "7/8 (stereo)":         {"target": "AudioOut/External/S3", "upper": "Ext. Out", "lower": "7/8"}
+    "1 (mono)": {
+      "target": "AudioOut/External/M0",
+      "upper": "Ext. Out",
+      "lower": "1"
+    },
+    "2 (mono)": {
+      "target": "AudioOut/External/M1",
+      "upper": "Ext. Out",
+      "lower": "2"
+    },
+    "3/4 (stereo)": {
+      "target": "AudioOut/External/S1",
+      "upper": "Ext. Out",
+      "lower": "3/4"
+    },
+    "5/6 (stereo)": {
+      "target": "AudioOut/External/S2",
+      "upper": "Ext. Out",
+      "lower": "5/6"
+    },
+    "7/8 (stereo)": {
+      "target": "AudioOut/External/S3",
+      "upper": "Ext. Out",
+      "lower": "7/8"
+    },
+    "9/10 (stereo)": {
+      "target": "AudioOut/External/S4",
+      "upper": "Ext. Out",
+      "lower": "9/10"
+    }
   }
 }
