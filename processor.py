@@ -34,9 +34,17 @@ def save_config(cfg):
 # KEY / TRANSPOSITION
 # ---------------------------------------------------------------------------
 
+# Enharmonic flat → sharp mapping so "Bb", "Eb" etc. are recognised
+ENHARMONIC = {
+    "BB": "A#", "DB": "C#", "EB": "D#",
+    "GB": "F#", "AB": "G#", "CB": "B",  "FB": "E",
+}
+
 def key_index(key_str):
+    k = key_str.strip().upper()
+    k = ENHARMONIC.get(k, k)
     try:
-        return KEYS.index(key_str.strip().upper())
+        return KEYS.index(k)
     except ValueError:
         return None
 
