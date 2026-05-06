@@ -25,7 +25,7 @@ ENHARMONIC_TO_SHARP = {
     "Gb": "F#", "Ab": "G#", "Bb": "A#", "Cb": "B",
 }
 WARP_MODE_COMPLEX = 4
-MASTER_ROUTE = {"target": "AudioOut/Master", "upper": "Master", "lower": ""}
+# MASTER_ROUTE is determined dynamically per file — see get_master_route()
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
 # ---------------------------------------------------------------------------
@@ -39,6 +39,22 @@ def load_config():
 def save_config(cfg):
     with open(CONFIG_PATH, "w") as f:
         json.dump(cfg, f, indent=2)
+
+# ---------------------------------------------------------------------------
+# MASTER ROUTE DETECTION
+# ---------------------------------------------------------------------------
+
+def get_master_route(root):
+    """
+    Detect the correct master output target for this file.
+    Live 12 renamed MasterTrack → MainTrack and uses 'AudioOut/Main'.
+    Live 11 uses MasterTrack and 'AudioOut/Master'.
+    """
+    # Live 12: has a MainTrack element
+    if root.find('.//MainTrack') is not None:
+        return {"target": "AudioOut/Main", "upper": "Main", "lower": ""}
+    # Live 11: has a MasterTrack element
+    return {"target": "AudioOut/Master", "upper": "Master", "lower": ""}
 
 # ---------------------------------------------------------------------------
 # KEY / TRANSPOSITION
@@ -334,15 +350,10 @@ def route_standard(root, index, children_of, songs, campus_cfg,
 
 def route_practice(root, index, children_of, songs, transpose_map, warnings, cfg):
     """
-    Transpose, route to Master, reset volumes, unmute, expand tracks.
-
-    Strategy: only set the song-level GroupTracks to Master. Category GroupTracks
-    and individual tracks already flow through the song group, so their signal
-    reaches Master automatically. We only need to:
-      - Set song GroupTracks → Master
-      - Reset volumes and unmute everything in the song hierarchy
-      - Route top-level AudioTracks (CLICK, CUES, GUIDE) → Master
-      - Leave MidiTracks and MIDI-group infrastructure completely untouched
+    Transpose, route ALL tracks to master, reset volumes, unmute, expand tracks.
+    Skips MidiTracks and anything inside ignored song groups (MIDI infrastructure).
+    Uses the file's own master target string (AudioOut/Main or AudioOut/Master)
+    to ensure compatibility across Ableton versions.
     """
     for song in songs:
         if song["ignored"]:
@@ -350,6 +361,9 @@ def route_practice(root, index, children_of, songs, transpose_map, warnings, cfg
         new_key = transpose_map.get(song["id"])
         if new_key and new_key != song["key"]:
             transpose_song(song, new_key, index, children_of, warnings, cfg)
+
+    # Detect correct master target for this file's Ableton version
+    master_route = get_master_route(root)
 
     # Build set of IDs belonging to ignored groups (MIDI infrastructure — never touch)
     ignored_ids = set()
@@ -359,31 +373,15 @@ def route_practice(root, index, children_of, songs, transpose_map, warnings, cfg
             for desc_id in get_descendants(song["id"], children_of):
                 ignored_ids.add(desc_id)
 
-    # Route top-level AudioTracks (CLICK, CUES, GUIDE) → Master
-    # Skip MidiTracks (MARKERS etc.) and anything in the MIDI group
-    for tid, t in index.items():
-        if t["group_id"] == -1 and t["tag"] == "AudioTrack" and tid not in ignored_ids:
-            set_routing(t["elem"], MASTER_ROUTE, warnings, t["name"])
-            reset_volume(t["elem"], warnings, t["name"])
-            unmute(t["elem"], warnings, t["name"])
-
-    # For each song: route the song GroupTrack → Master, then
-    # reset/unmute every descendant without changing their internal routing
-    for song in songs:
-        if song["ignored"]:
+    # Route every track to master — skip MidiTracks and MIDI-group infrastructure
+    for tid, t in sorted(index.items()):
+        if tid in ignored_ids:
             continue
-
-        # Song-level GroupTrack → Master
-        song_elem = index[song["id"]]["elem"]
-        set_routing(song_elem, MASTER_ROUTE, warnings, song["raw_name"])
-        reset_volume(song_elem, warnings, song["raw_name"])
-        unmute(song_elem, warnings, song["raw_name"])
-
-        # All descendants: reset volume and unmute only — don't change routing
-        for desc_id in get_descendants(song["id"], children_of):
-            desc = index[desc_id]
-            reset_volume(desc["elem"], warnings, desc["name"])
-            unmute(desc["elem"], warnings, desc["name"])
+        if t["tag"] == "MidiTrack":
+            continue
+        set_routing(t["elem"], master_route, warnings, t["name"])
+        reset_volume(t["elem"], warnings, t["name"])
+        unmute(t["elem"], warnings, t["name"])
 
     unfold_all_tracks(index)
 
