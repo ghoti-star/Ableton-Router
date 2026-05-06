@@ -13,7 +13,17 @@ import xml.etree.ElementTree as ET
 # CONSTANTS
 # ---------------------------------------------------------------------------
 
-KEYS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+# UI display order — includes both sharp and flat spellings for the dropdown
+KEYS = ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"]
+
+# Canonical 12-tone chromatic scale used for semitone arithmetic
+CHROMATIC = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+# All flat/enharmonic spellings → their sharp equivalent in CHROMATIC
+ENHARMONIC_TO_SHARP = {
+    "Db": "C#", "Eb": "D#", "Fb": "E",
+    "Gb": "F#", "Ab": "G#", "Bb": "A#", "Cb": "B",
+}
 WARP_MODE_COMPLEX = 4
 MASTER_ROUTE = {"target": "AudioOut/Master", "upper": "Master", "lower": ""}
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
@@ -35,16 +45,14 @@ def save_config(cfg):
 # ---------------------------------------------------------------------------
 
 # Enharmonic flat → sharp mapping so "Bb", "Eb" etc. are recognised
-ENHARMONIC = {
-    "BB": "A#", "DB": "C#", "EB": "D#",
-    "GB": "F#", "AB": "G#", "CB": "B",  "FB": "E",
-}
-
 def key_index(key_str):
-    k = key_str.strip().upper()
-    k = ENHARMONIC.get(k, k)
+    """Return 0-11 chromatic index, handling both sharp and flat spellings."""
+    k = key_str.strip()
+    if len(k) >= 1:
+        k = k[0].upper() + k[1:]  # normalise capitalisation e.g. "bb" → "Bb"
+    k = ENHARMONIC_TO_SHARP.get(k, k)  # flatten to sharp equivalent
     try:
-        return KEYS.index(k)
+        return CHROMATIC.index(k)
     except ValueError:
         return None
 
@@ -325,7 +333,17 @@ def route_standard(root, index, children_of, songs, campus_cfg,
             transpose_song(song, new_key, index, children_of, warnings, cfg)
 
 def route_practice(root, index, children_of, songs, transpose_map, warnings, cfg):
-    """Transpose, route instrument tracks to Master, reset volumes, unmute, expand tracks."""
+    """
+    Transpose, route to Master, reset volumes, unmute, expand tracks.
+
+    Strategy: only set the song-level GroupTracks to Master. Category GroupTracks
+    and individual tracks already flow through the song group, so their signal
+    reaches Master automatically. We only need to:
+      - Set song GroupTracks → Master
+      - Reset volumes and unmute everything in the song hierarchy
+      - Route top-level AudioTracks (CLICK, CUES, GUIDE) → Master
+      - Leave MidiTracks and MIDI-group infrastructure completely untouched
+    """
     for song in songs:
         if song["ignored"]:
             continue
@@ -333,37 +351,39 @@ def route_practice(root, index, children_of, songs, transpose_map, warnings, cfg
         if new_key and new_key != song["key"]:
             transpose_song(song, new_key, index, children_of, warnings, cfg)
 
-    # Build set of all track IDs that belong to ignored groups (e.g. MIDI infrastructure)
+    # Build set of IDs belonging to ignored groups (MIDI infrastructure — never touch)
     ignored_ids = set()
     for song in songs:
         if song["ignored"]:
+            ignored_ids.add(song["id"])
             for desc_id in get_descendants(song["id"], children_of):
                 ignored_ids.add(desc_id)
-            ignored_ids.add(song["id"])
 
-    # Route top-level AudioTracks only (CLICK, CUES, GUIDE) — skip MidiTracks
-    # and anything inside the MIDI/infrastructure group
+    # Route top-level AudioTracks (CLICK, CUES, GUIDE) → Master
+    # Skip MidiTracks (MARKERS etc.) and anything in the MIDI group
     for tid, t in index.items():
         if t["group_id"] == -1 and t["tag"] == "AudioTrack" and tid not in ignored_ids:
             set_routing(t["elem"], MASTER_ROUTE, warnings, t["name"])
             reset_volume(t["elem"], warnings, t["name"])
             unmute(t["elem"], warnings, t["name"])
 
-    # Route all instrument category tracks and their children
+    # For each song: route the song GroupTrack → Master, then
+    # reset/unmute every descendant without changing their internal routing
     for song in songs:
         if song["ignored"]:
             continue
-        for cat_id in song["category_ids"]:
-            cat = index[cat_id]
-            set_routing(cat["elem"], MASTER_ROUTE, warnings, cat["name"])
-            reset_volume(cat["elem"], warnings, cat["name"])
-            unmute(cat["elem"], warnings, cat["name"])
-            for child_id in children_of.get(cat_id, []):
-                child = index[child_id]
-                if child["tag"] == "AudioTrack":
-                    set_routing(child["elem"], MASTER_ROUTE, warnings, child["name"])
-                    reset_volume(child["elem"], warnings, child["name"])
-                    unmute(child["elem"], warnings, child["name"])
+
+        # Song-level GroupTrack → Master
+        song_elem = index[song["id"]]["elem"]
+        set_routing(song_elem, MASTER_ROUTE, warnings, song["raw_name"])
+        reset_volume(song_elem, warnings, song["raw_name"])
+        unmute(song_elem, warnings, song["raw_name"])
+
+        # All descendants: reset volume and unmute only — don't change routing
+        for desc_id in get_descendants(song["id"], children_of):
+            desc = index[desc_id]
+            reset_volume(desc["elem"], warnings, desc["name"])
+            unmute(desc["elem"], warnings, desc["name"])
 
     unfold_all_tracks(index)
 
