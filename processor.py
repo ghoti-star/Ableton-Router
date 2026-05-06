@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 # ---------------------------------------------------------------------------
 
 # UI display order — includes both sharp and flat spellings for the dropdown
-KEYS = ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"]
+KEYS = ["Ab", "A", "A#", "Bb", "B", "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#"]
 
 # Canonical 12-tone chromatic scale used for semitone arithmetic
 CHROMATIC = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
