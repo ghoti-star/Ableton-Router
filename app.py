@@ -4,7 +4,6 @@ app.py — Streamlit web UI for ALS stem routing and transposition.
 
 import io
 import json
-import zipfile
 
 import streamlit as st
 
@@ -106,7 +105,7 @@ with tab_process:
     for i, key in enumerate(campus_keys):
         with cols[i]:
             label = cfg["campuses"][key]["label"]
-            if st.checkbox(f"{label}", value=True, key=f"campus_{key}"):
+            if st.checkbox(f"{label}", value=False, key=f"campus_{key}"):
                 selected_campuses.append(key)
 
     if not selected_campuses:
@@ -154,61 +153,62 @@ with tab_process:
 
     # --- Generate ---
     if st.button("🎛️ Generate Files", type="primary", use_container_width=True):
-        zip_buffer = io.BytesIO()
+        import zipfile, io as _io
         all_warnings = []
-        files_added  = []
+        generated    = []  # list of (fname, bytes)
 
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-            progress = st.progress(0)
-            total_steps = len(selected_campuses) * 2
-            step = 0
+        progress    = st.progress(0)
+        total_steps = len(selected_campuses) * 2
+        step        = 0
 
-            for campus_key in selected_campuses:
-                label   = cfg["campuses"][campus_key]["label"]
-                t_map   = transpose_maps.get(campus_key, {})
+        for campus_key in selected_campuses:
+            label = cfg["campuses"][campus_key]["label"]
+            t_map = transpose_maps.get(campus_key, {})
 
-                # Routed file
-                with st.spinner(f"Building {label} routed file…"):
-                    try:
-                        out_bytes, warns = process_als(
-                            als_bytes, campus_key, t_map, cfg, practice=False)
-                        fname = f"{base_name}_{campus_key}.als"
-                        zf.writestr(fname, out_bytes)
-                        files_added.append(fname)
-                        all_warnings.extend(warns)
-                    except Exception as e:
-                        st.error(f"{label} routing failed: {e}")
-                step += 1
-                progress.progress(step / total_steps)
+            # Routed file
+            with st.spinner(f"Building {label} routed file…"):
+                try:
+                    out_bytes, warns = process_als(
+                        als_bytes, campus_key, t_map, cfg, practice=False)
+                    generated.append((f"{base_name}_{campus_key}.als", out_bytes))
+                    all_warnings.extend(warns)
+                except Exception as e:
+                    st.error(f"{label} routing failed: {e}")
+            step += 1
+            progress.progress(step / total_steps)
 
-                # Practice file
-                with st.spinner(f"Building {label} practice file…"):
-                    try:
-                        out_bytes, warns = process_als(
-                            als_bytes, campus_key, t_map, cfg, practice=True)
-                        fname = f"{base_name}_{campus_key}_Practice.als"
-                        zf.writestr(fname, out_bytes)
-                        files_added.append(fname)
-                        all_warnings.extend(warns)
-                    except Exception as e:
-                        st.error(f"{label} practice failed: {e}")
-                step += 1
-                progress.progress(step / total_steps)
+            # Practice file
+            with st.spinner(f"Building {label} practice file…"):
+                try:
+                    out_bytes, warns = process_als(
+                        als_bytes, campus_key, t_map, cfg, practice=True)
+                    generated.append((f"{base_name}_{campus_key}_Practice.als", out_bytes))
+                    all_warnings.extend(warns)
+                except Exception as e:
+                    st.error(f"{label} practice failed: {e}")
+            step += 1
+            progress.progress(step / total_steps)
 
-        zip_buffer.seek(0)
-        st.success(f"Done! Generated {len(files_added)} file(s).")
+        # Bundle into zip
+        zip_buf = _io.BytesIO()
+        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for fname, data in generated:
+                zf.writestr(fname, data)
+        zip_buf.seek(0)
 
-        for f in files_added:
-            st.markdown(f"• `{f}`")
+        st.success(f"Done! {len(generated)} file(s) ready.")
 
         if all_warnings:
             with st.expander(f"⚠️ {len(all_warnings)} warning(s)"):
                 for w in all_warnings:
                     st.markdown(f"- {w}")
 
+        for fname, _ in generated:
+            st.markdown(f"• `{fname}`")
+
         st.download_button(
             label="⬇️ Download All Files (.zip)",
-            data=zip_buffer,
+            data=zip_buf,
             file_name=f"{base_name}_outputs.zip",
             mime="application/zip",
             use_container_width=True,
