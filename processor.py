@@ -325,7 +325,7 @@ def route_standard(root, index, children_of, songs, campus_cfg,
             transpose_song(song, new_key, index, children_of, warnings, cfg)
 
 def route_practice(root, index, children_of, songs, transpose_map, warnings, cfg):
-    """Transpose, route everything to Master, reset volumes, unmute, expand tracks."""
+    """Transpose, route instrument tracks to Master, reset volumes, unmute, expand tracks."""
     for song in songs:
         if song["ignored"]:
             continue
@@ -333,12 +333,23 @@ def route_practice(root, index, children_of, songs, transpose_map, warnings, cfg
         if new_key and new_key != song["key"]:
             transpose_song(song, new_key, index, children_of, warnings, cfg)
 
+    # Build set of all track IDs that belong to ignored groups (e.g. MIDI infrastructure)
+    ignored_ids = set()
+    for song in songs:
+        if song["ignored"]:
+            for desc_id in get_descendants(song["id"], children_of):
+                ignored_ids.add(desc_id)
+            ignored_ids.add(song["id"])
+
+    # Route top-level AudioTracks only (CLICK, CUES, GUIDE) — skip MidiTracks
+    # and anything inside the MIDI/infrastructure group
     for tid, t in index.items():
-        if t["group_id"] == -1 and t["tag"] != "GroupTrack":
+        if t["group_id"] == -1 and t["tag"] == "AudioTrack" and tid not in ignored_ids:
             set_routing(t["elem"], MASTER_ROUTE, warnings, t["name"])
             reset_volume(t["elem"], warnings, t["name"])
             unmute(t["elem"], warnings, t["name"])
 
+    # Route all instrument category tracks and their children
     for song in songs:
         if song["ignored"]:
             continue
@@ -349,9 +360,10 @@ def route_practice(root, index, children_of, songs, transpose_map, warnings, cfg
             unmute(cat["elem"], warnings, cat["name"])
             for child_id in children_of.get(cat_id, []):
                 child = index[child_id]
-                set_routing(child["elem"], MASTER_ROUTE, warnings, child["name"])
-                reset_volume(child["elem"], warnings, child["name"])
-                unmute(child["elem"], warnings, child["name"])
+                if child["tag"] == "AudioTrack":
+                    set_routing(child["elem"], MASTER_ROUTE, warnings, child["name"])
+                    reset_volume(child["elem"], warnings, child["name"])
+                    unmute(child["elem"], warnings, child["name"])
 
     unfold_all_tracks(index)
 
