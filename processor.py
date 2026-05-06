@@ -381,8 +381,11 @@ def process_als(als_bytes, campus_key, transpose_map, cfg, practice=False):
         route_standard(root, index, children_of, songs,
                        campus_cfg, cfg, transpose_map, warnings)
 
-    out_bytes = gzip.compress(
-        ET.tostring(root, encoding="utf-8", xml_declaration=True))
+    # Prepend the exact XML declaration Ableton expects.
+    # ET.tostring with xml_declaration=True uses single quotes which breaks Ableton.
+    xml_body = ET.tostring(root, encoding="unicode")
+    xml_decl = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    out_bytes = gzip.compress((xml_decl + xml_body).encode("utf-8"))
     return out_bytes, warnings
 
 def scan_songs(als_bytes, cfg):
