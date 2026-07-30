@@ -245,7 +245,19 @@ def apply_mixer_adjustments(cat_name, cat_elem, children_of, index,
 # TRANSPOSITION
 # ---------------------------------------------------------------------------
 
-def transpose_song(song, new_key, index, children_of, warnings, cfg):
+def get_max_id(root):
+    """Return the highest Id attribute value in the entire document."""
+    max_id = 0
+    for elem in root.iter():
+        id_attr = elem.get("Id")
+        if id_attr is not None:
+            try:
+                max_id = max(max_id, int(id_attr))
+            except ValueError:
+                pass
+    return max_id
+
+def transpose_song(song, new_key, index, children_of, warnings, cfg, next_id_ref=None):
     current_key = song["key"]
     if current_key is None:
         warnings.append(f"'{song['raw_name']}' has no key in name — cannot transpose.")
@@ -310,12 +322,17 @@ def transpose_song(song, new_key, index, children_of, warnings, cfg):
                     if wmarkers_parent is not None:
                         for wm in list(wmarkers_parent):
                             wmarkers_parent.remove(wm)
+                        # Assign new unique Ids above the file's existing max
+                        id1 = next_id_ref[0]; next_id_ref[0] += 1
+                        id2 = next_id_ref[0]; next_id_ref[0] += 1
                         # Start point
                         wm_start = ET.SubElement(wmarkers_parent, "WarpMarker")
+                        wm_start.set("Id", str(id1))
                         wm_start.set("SecTime", "0")
                         wm_start.set("BeatTime", "0")
                         # End point
                         wm_end = ET.SubElement(wmarkers_parent, "WarpMarker")
+                        wm_end.set("Id", str(id2))
                         wm_end.set("SecTime", f"{dur_secs:.10f}")
                         wm_end.set("BeatTime", f"{dur_beats:.10f}")
 
@@ -374,7 +391,7 @@ def effective_top_level_rules(campus_cfg, cfg):
 # ---------------------------------------------------------------------------
 
 def route_standard(root, index, children_of, songs, campus_cfg,
-                   cfg, transpose_map, warnings):
+                   cfg, transpose_map, warnings, next_id_ref=None):
     """Apply campus routing, mixer adjustments, and transposition."""
     adjustments_map = campus_cfg.get("mixer_adjustments", {})
     top_level_rules = effective_top_level_rules(campus_cfg, cfg)
@@ -416,9 +433,9 @@ def route_standard(root, index, children_of, songs, campus_cfg,
 
         new_key = transpose_map.get(song["id"])
         if new_key and new_key != song["key"]:
-            transpose_song(song, new_key, index, children_of, warnings, cfg)
+            transpose_song(song, new_key, index, children_of, warnings, cfg, next_id_ref)
 
-def route_practice(root, index, children_of, songs, transpose_map, warnings, cfg):
+def route_practice(root, index, children_of, songs, transpose_map, warnings, cfg, next_id_ref=None):
     """
     Transpose, route ALL tracks to master, reset volumes, unmute, expand tracks.
     Skips MidiTracks and anything inside ignored song groups (MIDI infrastructure).
@@ -430,7 +447,7 @@ def route_practice(root, index, children_of, songs, transpose_map, warnings, cfg
             continue
         new_key = transpose_map.get(song["id"])
         if new_key and new_key != song["key"]:
-            transpose_song(song, new_key, index, children_of, warnings, cfg)
+            transpose_song(song, new_key, index, children_of, warnings, cfg, next_id_ref)
 
     # Detect correct master target for this file's Ableton version
     master_route = get_master_route(root)
@@ -474,12 +491,15 @@ def process_als(als_bytes, campus_key, transpose_map, cfg, practice=False):
     songs = identify_songs(index, children_of, cfg)
     campus_cfg = cfg["campuses"][campus_key]
 
+    # Compute the max existing Id so new WarpMarker elements get unique Ids
+    next_id_ref = [get_max_id(root) + 1]
+
     if practice:
         route_practice(root, index, children_of, songs,
-                       transpose_map, warnings, cfg)
+                       transpose_map, warnings, cfg, next_id_ref)
     else:
         route_standard(root, index, children_of, songs,
-                       campus_cfg, cfg, transpose_map, warnings)
+                       campus_cfg, cfg, transpose_map, warnings, next_id_ref)
 
     # Prepend the exact XML declaration Ableton expects.
     # ET.tostring with xml_declaration=True uses single quotes which breaks Ableton.
