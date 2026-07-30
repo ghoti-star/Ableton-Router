@@ -320,11 +320,17 @@ def transpose_song(song, new_key, index, children_of, warnings, cfg, next_id_ref
                     # Replace all warp markers with a clean 2-point map
                     wmarkers_parent = clip.find(".//WarpMarkers")
                     if wmarkers_parent is not None:
-                        for wm in list(wmarkers_parent):
+                        # Capture existing indentation from the first marker's tail
+                        existing = list(wmarkers_parent)
+                        member_indent = existing[0].tail if existing else None
+                        close_indent  = wmarkers_parent.text if wmarkers_parent.text else None
+                        for wm in existing:
                             wmarkers_parent.remove(wm)
+
                         # Assign new unique Ids above the file's existing max
                         id1 = next_id_ref[0]; next_id_ref[0] += 1
                         id2 = next_id_ref[0]; next_id_ref[0] += 1
+
                         # Start point
                         wm_start = ET.SubElement(wmarkers_parent, "WarpMarker")
                         wm_start.set("Id", str(id1))
@@ -335,6 +341,17 @@ def transpose_song(song, new_key, index, children_of, warnings, cfg, next_id_ref
                         wm_end.set("Id", str(id2))
                         wm_end.set("SecTime", f"{dur_secs:.10f}")
                         wm_end.set("BeatTime", f"{dur_beats:.10f}")
+
+                        # Restore indentation so each marker is on its own line
+                        if member_indent is not None:
+                            wmarkers_parent.text = member_indent
+                            wm_start.tail = member_indent
+                            wm_end.tail   = close_indent
+
+                        # Tell Ableton these are user-defined markers, not auto-generated
+                        mg = clip.find("MarkersGenerated")
+                        if mg is not None:
+                            mg.set("Value", "false")
 
             if iw is not None:
                 iw.set("Value", "true")
