@@ -176,6 +176,19 @@ def get_descendants(pid, children_of):
         result.extend(get_descendants(cid, children_of))
     return result
 
+def get_song_timeline_start(tid, children_of, index):
+    """Return the earliest clip start time for any audio clip in this song group."""
+    earliest = float("inf")
+    for desc_id in get_descendants(tid, children_of):
+        t = index[desc_id]
+        if t["tag"] != "AudioTrack":
+            continue
+        for clip in t["elem"].findall(".//AudioClip"):
+            cs = clip.find("CurrentStart")
+            if cs is not None:
+                earliest = min(earliest, float(cs.get("Value", float("inf"))))
+    return earliest if earliest < float("inf") else float("inf")
+
 def identify_songs(index, children_of, cfg):
     ignored = {n.upper() for n in cfg.get("ignored_song_groups", [])}
     songs = []
@@ -190,7 +203,13 @@ def identify_songs(index, children_of, cfg):
                 "ignored":      t["name"].upper() in ignored,
                 "category_ids": children_of.get(tid, []),
             })
-    return sorted(songs, key=lambda s: s["id"])
+    # Sort by actual timeline position, not by track ID.
+    # This ensures the correct order even if songs were rearranged after creation.
+    def sort_key(s):
+        if s["ignored"]:
+            return float("inf")  # push ignored groups (MIDI) to end
+        return get_song_timeline_start(s["id"], children_of, index)
+    return sorted(songs, key=sort_key)
 
 # ---------------------------------------------------------------------------
 # MIXER ADJUSTMENTS
@@ -249,6 +268,57 @@ def transpose_song(song, new_key, index, children_of, warnings, cfg):
             continue
         for clip in t["elem"].findall(".//AudioClip"):
             iw = clip.find("IsWarped")
+            was_warped = iw is not None and iw.get("Value") == "true"
+
+            # If the clip was unwarped, its LoopEnd/HiddenLoopEnd are in SECONDS
+            # not beats. Enabling warp changes the interpretation, so we must:
+            # 1. Recalculate LoopEnd/HiddenLoopEnd in beats at session tempo
+            # 2. Replace stale warp markers with a clean 2-point map
+            if not was_warped:
+                # Get audio duration in seconds from sample data
+                dur_elem = clip.find(".//SampleRef/DefaultDuration")
+                sr_elem  = clip.find(".//SampleRef/DefaultSampleRate")
+                if dur_elem is not None and sr_elem is not None:
+                    dur_secs  = int(dur_elem.get("Value", 0)) / int(sr_elem.get("Value", 48000))
+                    # At session tempo (120 BPM): 1 beat = 0.5s → beats = secs * 2
+                    # But we can derive it from existing warp markers instead,
+                    # which is more reliable than assuming 120 BPM.
+                    # The last warp marker gives us SecTime→BeatTime at tempo.
+                    wmarkers = clip.findall(".//WarpMarker")
+                    if len(wmarkers) >= 2:
+                        last = wmarkers[-2]  # second-to-last is the real end point
+                        last_sec  = float(last.get("SecTime", dur_secs))
+                        last_beat = float(last.get("BeatTime", dur_secs * 2))
+                        # Derive beats per second from the marker
+                        if last_sec > 0:
+                            beats_per_sec = last_beat / last_sec
+                        else:
+                            beats_per_sec = 2.0  # fallback: 120 BPM
+                    else:
+                        beats_per_sec = 2.0  # fallback: 120 BPM
+
+                    dur_beats = dur_secs * beats_per_sec
+
+                    # Update LoopEnd and HiddenLoopEnd from seconds to beats
+                    for loop_tag in ["Loop/LoopEnd", "Loop/HiddenLoopEnd"]:
+                        el = clip.find(loop_tag)
+                        if el is not None:
+                            el.set("Value", f"{dur_beats:.10f}")
+
+                    # Replace all warp markers with a clean 2-point map
+                    wmarkers_parent = clip.find(".//WarpMarkers")
+                    if wmarkers_parent is not None:
+                        for wm in list(wmarkers_parent):
+                            wmarkers_parent.remove(wm)
+                        # Start point
+                        wm_start = ET.SubElement(wmarkers_parent, "WarpMarker")
+                        wm_start.set("SecTime", "0")
+                        wm_start.set("BeatTime", "0")
+                        # End point
+                        wm_end = ET.SubElement(wmarkers_parent, "WarpMarker")
+                        wm_end.set("SecTime", f"{dur_secs:.10f}")
+                        wm_end.set("BeatTime", f"{dur_beats:.10f}")
+
             if iw is not None:
                 iw.set("Value", "true")
             wm = clip.find("WarpMode")
