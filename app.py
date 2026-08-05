@@ -9,6 +9,7 @@ import streamlit as st
 
 from processor import (
     KEYS,
+    SCRIPT_VERSION,
     load_config, save_config,
     process_als, scan_songs, scan_unknown_categories,
 )
@@ -170,7 +171,7 @@ with tab_process:
                 try:
                     out_bytes, warns = process_als(
                         als_bytes, campus_key, t_map, cfg, practice=False)
-                    generated.append((f"{base_name}_{campus_key}.als", out_bytes))
+                    generated.append((f"{base_name}_{campus_key}_{SCRIPT_VERSION}.als", out_bytes))
                     all_warnings.extend(warns)
                 except Exception as e:
                     st.error(f"{label} routing failed: {e}")
@@ -182,7 +183,7 @@ with tab_process:
                 try:
                     out_bytes, warns = process_als(
                         als_bytes, campus_key, t_map, cfg, practice=True)
-                    generated.append((f"{base_name}_{campus_key}_Practice.als", out_bytes))
+                    generated.append((f"{base_name}_{campus_key}_Practice_{SCRIPT_VERSION}.als", out_bytes))
                     all_warnings.extend(warns)
                 except Exception as e:
                     st.error(f"{label} practice failed: {e}")
