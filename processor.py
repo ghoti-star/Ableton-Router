@@ -257,7 +257,8 @@ def get_max_id(root):
                 pass
     return max_id
 
-def transpose_song(song, new_key, index, children_of, warnings, cfg, next_id_ref=None):
+def transpose_song(song, new_key, index, children_of, warnings, cfg,
+                   next_id_ref=None, original_warp_state=None):
     current_key = song["key"]
     if current_key is None:
         warnings.append(f"'{song['raw_name']}' has no key in name — cannot transpose.")
@@ -280,12 +281,23 @@ def transpose_song(song, new_key, index, children_of, warnings, cfg, next_id_ref
             continue
         for clip in t["elem"].findall(".//AudioClip"):
             iw = clip.find("IsWarped")
-            was_warped = iw is not None and iw.get("Value") == "true"
+
+            # Use snapshotted original state if available (prevents false positives
+            # when route_practice has already set IsWarped=true on everything).
+            # Fall back to reading current element state for route_standard.
+            if original_warp_state is not None:
+                clip_key = (id(t["elem"]),
+                            list(t["elem"].findall(".//AudioClip")).index(clip))
+                was_warped = original_warp_state.get(clip_key, True)
+            else:
+                was_warped = iw is not None and iw.get("Value") == "true"
 
             # If the clip was unwarped, its LoopEnd/HiddenLoopEnd are in SECONDS
             # not beats. Enabling warp changes the interpretation, so we must:
             # 1. Recalculate LoopEnd/HiddenLoopEnd in beats at session tempo
             # 2. Replace stale warp markers with a clean 2-point map
+            # If the clip was ALREADY warped, leave all existing markers untouched —
+            # Ableton calibrated them correctly for the song's native tempo.
             if not was_warped:
                 # Get audio duration in seconds from sample data
                 dur_elem = clip.find(".//SampleRef/DefaultDuration")
@@ -408,7 +420,8 @@ def effective_top_level_rules(campus_cfg, cfg):
 # ---------------------------------------------------------------------------
 
 def route_standard(root, index, children_of, songs, campus_cfg,
-                   cfg, transpose_map, warnings, next_id_ref=None):
+                   cfg, transpose_map, warnings, next_id_ref=None,
+                   original_warp_state=None):
     """Apply campus routing, mixer adjustments, and transposition."""
     adjustments_map = campus_cfg.get("mixer_adjustments", {})
     top_level_rules = effective_top_level_rules(campus_cfg, cfg)
@@ -450,21 +463,26 @@ def route_standard(root, index, children_of, songs, campus_cfg,
 
         new_key = transpose_map.get(song["id"])
         if new_key and new_key != song["key"]:
-            transpose_song(song, new_key, index, children_of, warnings, cfg, next_id_ref)
+            transpose_song(song, new_key, index, children_of, warnings, cfg,
+                           next_id_ref, original_warp_state)
 
-def route_practice(root, index, children_of, songs, transpose_map, warnings, cfg, next_id_ref=None):
+def route_practice(root, index, children_of, songs, transpose_map, warnings, cfg,
+                   next_id_ref=None, original_warp_state=None):
     """
     Transpose, route ALL tracks to master, reset volumes, unmute, expand tracks.
     Skips MidiTracks and anything inside ignored song groups (MIDI infrastructure).
     Uses the file's own master target string (AudioOut/Main or AudioOut/Master)
     to ensure compatibility across Ableton versions.
     """
+    # original_warp_state is passed in from process_als (snapshotted before any
+    # modifications). transpose_song uses it to detect truly-unwarped clips.
     for song in songs:
         if song["ignored"]:
             continue
         new_key = transpose_map.get(song["id"])
         if new_key and new_key != song["key"]:
-            transpose_song(song, new_key, index, children_of, warnings, cfg, next_id_ref)
+            transpose_song(song, new_key, index, children_of, warnings, cfg,
+                           next_id_ref, original_warp_state)
 
     # Detect correct master target for this file's Ableton version
     master_route = get_master_route(root)
@@ -511,12 +529,28 @@ def process_als(als_bytes, campus_key, transpose_map, cfg, practice=False):
     # Compute the max existing Id so new WarpMarker elements get unique Ids
     next_id_ref = [get_max_id(root) + 1]
 
+    # Snapshot original IsWarped state for all clips before any modifications.
+    # This is critical for route_standard too — without it, route_standard reads
+    # correct state. But we pass it anyway for consistency and future-proofing.
+    original_warp_state = {}
+    for tid, t in index.items():
+        if t["tag"] != "AudioTrack":
+            continue
+        clips = t["elem"].findall(".//AudioClip")
+        for ci, clip in enumerate(clips):
+            iw = clip.find("IsWarped")
+            original_warp_state[(id(t["elem"]), ci)] = (
+                iw is not None and iw.get("Value") == "true"
+            )
+
     if practice:
         route_practice(root, index, children_of, songs,
-                       transpose_map, warnings, cfg, next_id_ref)
+                       transpose_map, warnings, cfg, next_id_ref,
+                       original_warp_state)
     else:
         route_standard(root, index, children_of, songs,
-                       campus_cfg, cfg, transpose_map, warnings, next_id_ref)
+                       campus_cfg, cfg, transpose_map, warnings, next_id_ref,
+                       original_warp_state)
 
     # Prepend the exact XML declaration Ableton expects.
     # ET.tostring with xml_declaration=True uses single quotes which breaks Ableton.
