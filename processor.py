@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 
 # UI display order — includes both sharp and flat spellings for the dropdown
 # Script version — increment this with every deployment
-SCRIPT_VERSION = "v1.0"
+SCRIPT_VERSION = "v1.1"
 
 KEYS = ["Ab", "A", "A#", "Bb", "B", "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#"]
 
@@ -332,11 +332,27 @@ def transpose_song(song, new_key, index, children_of, warnings, cfg,
                         if el is not None:
                             el.set("Value", f"{dur_beats:.10f}")
 
-                    # Replace all warp markers with a clean 2-point map
+                    # Replace all warp markers with a clean 2-point map.
+                    # IMPORTANT: preserve the first marker's SecTime offset (pre-roll).
+                    # Some stems have silence at the start of the audio file before the
+                    # musical content begins. The original first marker maps that offset
+                    # to BeatTime=0 (the start of the clip). If we blindly start from
+                    # SecTime=0, the audio plays that many seconds too early.
                     wmarkers_parent = clip.find(".//WarpMarkers")
                     if wmarkers_parent is not None:
-                        # Capture existing indentation from the first marker's tail
                         existing = list(wmarkers_parent)
+
+                        # Read pre-roll offset from the first existing marker
+                        preroll_secs = 0.0
+                        if existing:
+                            first_sec  = float(existing[0].get("SecTime", "0"))
+                            first_beat = float(existing[0].get("BeatTime", "0"))
+                            # Pre-roll: first marker maps to beat 0 but starts
+                            # at some non-zero SecTime into the audio file
+                            if first_beat == 0 and first_sec > 0:
+                                preroll_secs = first_sec
+
+                        # Capture existing indentation
                         member_indent = existing[0].tail if existing else None
                         close_indent  = wmarkers_parent.text if wmarkers_parent.text else None
                         for wm in existing:
@@ -346,12 +362,12 @@ def transpose_song(song, new_key, index, children_of, warnings, cfg,
                         id1 = next_id_ref[0]; next_id_ref[0] += 1
                         id2 = next_id_ref[0]; next_id_ref[0] += 1
 
-                        # Start point
+                        # Start point — honour the pre-roll offset
                         wm_start = ET.SubElement(wmarkers_parent, "WarpMarker")
                         wm_start.set("Id", str(id1))
-                        wm_start.set("SecTime", "0")
+                        wm_start.set("SecTime", f"{preroll_secs:.10f}")
                         wm_start.set("BeatTime", "0")
-                        # End point
+                        # End point — audio ends at dur_secs, content spans dur_beats
                         wm_end = ET.SubElement(wmarkers_parent, "WarpMarker")
                         wm_end.set("Id", str(id2))
                         wm_end.set("SecTime", f"{dur_secs:.10f}")
