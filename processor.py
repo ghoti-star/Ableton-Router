@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 
 # UI display order — includes both sharp and flat spellings for the dropdown
 # Script version — increment this with every deployment
-SCRIPT_VERSION = "v1.2"
+SCRIPT_VERSION = "v1.3"
 
 KEYS = ["Ab", "A", "A#", "Bb", "B", "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#"]
 
@@ -326,41 +326,40 @@ def transpose_song(song, new_key, index, children_of, warnings, cfg,
 
                     dur_beats = dur_secs * beats_per_sec
 
-                    # Update LoopEnd and HiddenLoopEnd from seconds to beats
+                    # Gather original markers BEFORE modifying anything —
+                    # we need them to derive both LoopEnd and warp marker endpoints.
+                    wmarkers_parent = clip.find(".//WarpMarkers")
+                    existing = list(wmarkers_parent) if wmarkers_parent is not None else []
+
+                    # --- Derive start anchor (pre-roll) ---
+                    preroll_secs = 0.0
+                    if existing:
+                        first_sec  = float(existing[0].get("SecTime", "0"))
+                        first_beat = float(existing[0].get("BeatTime", "0"))
+                        if first_beat == 0 and first_sec > 0:
+                            preroll_secs = first_sec
+
+                    # --- Derive end anchor from original second marker ---
+                    # The second marker is the true musical content end.
+                    # Markers after that are fine quantisation anchors.
+                    if len(existing) >= 2:
+                        end_sec  = float(existing[1].get("SecTime", str(dur_secs)))
+                        end_beat = float(existing[1].get("BeatTime", str(dur_beats)))
+                    else:
+                        end_sec  = dur_secs
+                        end_beat = dur_beats
+
+                    # Update LoopEnd and HiddenLoopEnd using the musical end beat,
+                    # not the full audio duration. This is what Ableton uses to
+                    # determine where the clip content ends.
                     for loop_tag in ["Loop/LoopEnd", "Loop/HiddenLoopEnd"]:
                         el = clip.find(loop_tag)
                         if el is not None:
-                            el.set("Value", f"{dur_beats:.10f}")
+                            el.set("Value", f"{end_beat:.10f}")
 
                     # Replace all warp markers with a clean 2-point map.
-                    # We use the ORIGINAL markers to derive both endpoints so that
-                    # the pre-roll offset and the true musical end are preserved.
-                    wmarkers_parent = clip.find(".//WarpMarkers")
                     if wmarkers_parent is not None:
-                        existing = list(wmarkers_parent)
-
-                        # --- Derive start anchor (pre-roll) ---
-                        # The first marker maps SecTime=X → BeatTime=0, where X is
-                        # the seconds of silence before the musical downbeat.
-                        preroll_secs = 0.0
-                        if existing:
-                            first_sec  = float(existing[0].get("SecTime", "0"))
-                            first_beat = float(existing[0].get("BeatTime", "0"))
-                            if first_beat == 0 and first_sec > 0:
-                                preroll_secs = first_sec
-
-                        # --- Derive end anchor from original markers ---
-                        # The second marker (index 1) is the true musical content end.
-                        # Markers after that are fine quantisation anchors — ignore them.
-                        # This prevents Ableton from time-stretching tail silence into
-                        # the musical content, which shifts audio forward in time.
-                        if len(existing) >= 2:
-                            end_sec  = float(existing[1].get("SecTime", str(dur_secs)))
-                            end_beat = float(existing[1].get("BeatTime", str(dur_beats)))
-                        else:
-                            # Fallback: no second marker, use computed duration
-                            end_sec  = dur_secs
-                            end_beat = dur_beats
+                        existing = list(wmarkers_parent)  # re-read (same list)
 
                         # Capture existing indentation
                         member_indent = existing[0].tail if existing else None
