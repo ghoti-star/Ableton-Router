@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 
 # UI display order — includes both sharp and flat spellings for the dropdown
 # Script version — increment this with every deployment
-SCRIPT_VERSION = "v1.1"
+SCRIPT_VERSION = "v1.2"
 
 KEYS = ["Ab", "A", "A#", "Bb", "B", "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#"]
 
@@ -333,24 +333,34 @@ def transpose_song(song, new_key, index, children_of, warnings, cfg,
                             el.set("Value", f"{dur_beats:.10f}")
 
                     # Replace all warp markers with a clean 2-point map.
-                    # IMPORTANT: preserve the first marker's SecTime offset (pre-roll).
-                    # Some stems have silence at the start of the audio file before the
-                    # musical content begins. The original first marker maps that offset
-                    # to BeatTime=0 (the start of the clip). If we blindly start from
-                    # SecTime=0, the audio plays that many seconds too early.
+                    # We use the ORIGINAL markers to derive both endpoints so that
+                    # the pre-roll offset and the true musical end are preserved.
                     wmarkers_parent = clip.find(".//WarpMarkers")
                     if wmarkers_parent is not None:
                         existing = list(wmarkers_parent)
 
-                        # Read pre-roll offset from the first existing marker
+                        # --- Derive start anchor (pre-roll) ---
+                        # The first marker maps SecTime=X → BeatTime=0, where X is
+                        # the seconds of silence before the musical downbeat.
                         preroll_secs = 0.0
                         if existing:
                             first_sec  = float(existing[0].get("SecTime", "0"))
                             first_beat = float(existing[0].get("BeatTime", "0"))
-                            # Pre-roll: first marker maps to beat 0 but starts
-                            # at some non-zero SecTime into the audio file
                             if first_beat == 0 and first_sec > 0:
                                 preroll_secs = first_sec
+
+                        # --- Derive end anchor from original markers ---
+                        # The second marker (index 1) is the true musical content end.
+                        # Markers after that are fine quantisation anchors — ignore them.
+                        # This prevents Ableton from time-stretching tail silence into
+                        # the musical content, which shifts audio forward in time.
+                        if len(existing) >= 2:
+                            end_sec  = float(existing[1].get("SecTime", str(dur_secs)))
+                            end_beat = float(existing[1].get("BeatTime", str(dur_beats)))
+                        else:
+                            # Fallback: no second marker, use computed duration
+                            end_sec  = dur_secs
+                            end_beat = dur_beats
 
                         # Capture existing indentation
                         member_indent = existing[0].tail if existing else None
@@ -367,11 +377,11 @@ def transpose_song(song, new_key, index, children_of, warnings, cfg,
                         wm_start.set("Id", str(id1))
                         wm_start.set("SecTime", f"{preroll_secs:.10f}")
                         wm_start.set("BeatTime", "0")
-                        # End point — audio ends at dur_secs, content spans dur_beats
+                        # End point — use original second marker for musical accuracy
                         wm_end = ET.SubElement(wmarkers_parent, "WarpMarker")
                         wm_end.set("Id", str(id2))
-                        wm_end.set("SecTime", f"{dur_secs:.10f}")
-                        wm_end.set("BeatTime", f"{dur_beats:.10f}")
+                        wm_end.set("SecTime", f"{end_sec:.10f}")
+                        wm_end.set("BeatTime", f"{end_beat:.10f}")
 
                         # Restore indentation so each marker is on its own line
                         if member_indent is not None:
