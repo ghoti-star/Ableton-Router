@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 
 # UI display order — includes both sharp and flat spellings for the dropdown
 # Script version — increment this with every deployment
-SCRIPT_VERSION = "v1.3"
+SCRIPT_VERSION = "v1.4"
 
 KEYS = ["Ab", "A", "A#", "Bb", "B", "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#"]
 
@@ -349,9 +349,15 @@ def transpose_song(song, new_key, index, children_of, warnings, cfg,
                         end_sec  = dur_secs
                         end_beat = dur_beats
 
-                    # Update LoopEnd and HiddenLoopEnd using the musical end beat,
-                    # not the full audio duration. This is what Ableton uses to
-                    # determine where the clip content ends.
+                    # Update loop bounds for warped playback.
+                    # When unwarped, LoopStart is in SECONDS (file offset).
+                    # When warped, it's in BEATS. The first warp marker already
+                    # anchors the audio at BeatTime=0, so LoopStart must be 0.
+                    for loop_tag in ["Loop/LoopStart", "Loop/HiddenLoopStart"]:
+                        el = clip.find(loop_tag)
+                        if el is not None:
+                            el.set("Value", "0")
+                    # LoopEnd/HiddenLoopEnd: use musical end beat from original markers.
                     for loop_tag in ["Loop/LoopEnd", "Loop/HiddenLoopEnd"]:
                         el = clip.find(loop_tag)
                         if el is not None:
