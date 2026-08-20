@@ -48,6 +48,7 @@ tab_process, tab_settings = st.tabs(["🎛️ Process", "⚙️ Settings"])
 with tab_process:
     st.title("🎛️ Stem Router")
     st.caption("Upload an Ableton .als file, configure keys, and download your campus files.")
+    st.info(f"🔢 Script version: **{SCRIPT_VERSION}**")
 
     # --- File upload ---
     uploaded = st.file_uploader("Upload .als file", type=["als"])
