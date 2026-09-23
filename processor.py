@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 
 # UI display order — includes both sharp and flat spellings for the dropdown
 # Script version — increment this with every deployment
-SCRIPT_VERSION = "v1.4a"
+SCRIPT_VERSION = "v1.5"
 
 KEYS = ["Ab", "A", "A#", "Bb", "B", "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#"]
 
@@ -406,7 +406,25 @@ def transpose_song(song, new_key, index, children_of, warnings, cfg,
                 wm.set("Value", str(WARP_MODE_COMPLEX))
             pitch = clip.find("PitchCoarse")
             if pitch is not None:
-                pitch.set("Value", str(int(pitch.get("Value", "0")) + delta))
+                existing = int(pitch.get("Value", "0"))
+                # existing PitchCoarse already shifts the audio from its native
+                # recorded key toward the song's labeled key. To find the target
+                # pitch that keeps the absolute value closest to zero, we compute
+                # what shift takes the NATIVE audio key to the new target key.
+                # Native key = labeled key minus existing shift (in semitones).
+                # e.g. labeled D, existing +5 → native A; target G → delta A→G = -2
+                chromatic = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
+                enharmonic = {"Db":"C#","Eb":"D#","Fb":"E","Gb":"F#","Ab":"G#","Bb":"A#","Cb":"B"}
+                def to_idx(k):
+                    k = enharmonic.get(k, k)
+                    return chromatic.index(k)
+                native_idx = (to_idx(current_key) - existing) % 12
+                target_idx = to_idx(new_key)
+                raw_delta  = (target_idx - native_idx) % 12
+                # Pick the direction that keeps absolute value ≤ 6
+                if raw_delta > 6:
+                    raw_delta -= 12
+                pitch.set("Value", str(raw_delta))
                 clip_count += 1
 
     new_raw = format_song_name(song["base_name"], new_key)
