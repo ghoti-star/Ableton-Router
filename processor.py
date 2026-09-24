@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 
 # UI display order — includes both sharp and flat spellings for the dropdown
 # Script version — increment this with every deployment
-SCRIPT_VERSION = "v1.5"
+SCRIPT_VERSION = "v1.6"
 
 KEYS = ["Ab", "A", "A#", "Bb", "B", "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#"]
 
@@ -348,6 +348,29 @@ def transpose_song(song, new_key, index, children_of, warnings, cfg,
                     else:
                         end_sec  = dur_secs
                         end_beat = dur_beats
+
+                    # --- v1.6 safety check ---
+                    # Some unwarped clips store markers as
+                    # [pre-roll at negative beat, anchor at beat 0, +1/32 beat],
+                    # so the "second marker" is the beat-0 anchor, not the end.
+                    # Using it produced a map like (0s→0, 262s→0): infinite
+                    # stretch, which hangs Ableton's offline render (Sep 27
+                    # Bell Shoals freeze at 31%). Also skip sub-beat slivers,
+                    # which are inaudible leftovers and not worth warping.
+                    cs = clip.find("CurrentStart")
+                    ce = clip.find("CurrentEnd")
+                    clip_len = (float(ce.get("Value")) - float(cs.get("Value"))
+                                if cs is not None and ce is not None else None)
+                    bad_map = end_beat <= 0 or end_sec <= preroll_secs
+                    sliver  = clip_len is not None and clip_len < 1.0
+                    if bad_map or sliver:
+                        reason = ("clip shorter than 1 beat" if sliver
+                                  else "warp markers can't be converted safely")
+                        warnings.append(
+                            f"'{song['raw_name']}' → track '{t['name']}': left "
+                            f"untouched ({reason}). Check this clip in Ableton."
+                        )
+                        continue
 
                     # Update loop bounds for warped playback.
                     # When unwarped, LoopStart is in SECONDS (file offset).
