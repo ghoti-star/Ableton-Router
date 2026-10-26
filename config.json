@@ -75,6 +75,9 @@
   "ignored_song_groups": [
     "MIDI"
   ],
+  "always_mute_tracks": [
+    "PIANO"
+  ],
   "campuses": {
     "ABC_Eng": {
       "label": "ABC English",
@@ -115,7 +118,11 @@
             "action": "mute"
           }
         ]
-      }
+      },
+      "delete_tracks": [
+        "HELIX*",
+        "SMPTE"
+      ]
     },
     "ABC_Esp": {
       "label": "ABC Espa\u00f1ol",
@@ -154,7 +161,11 @@
             "action": "mute"
           }
         ]
-      }
+      },
+      "delete_tracks": [
+        "HELIX*",
+        "SMPTE"
+      ]
     },
     "ABC_Stu": {
       "label": "ABC Students",
@@ -195,7 +206,11 @@
             "action": "mute"
           }
         ]
-      }
+      },
+      "delete_tracks": [
+        "HELIX*",
+        "SMPTE"
+      ]
     },
     "Brandon_Esp": {
       "label": "Brandon Espa\u00f1ol",
@@ -466,7 +481,11 @@
             "action": "mute"
           }
         ]
-      }
+      },
+      "delete_tracks": [
+        "HELIX*",
+        "SMPTE"
+      ]
     }
   },
   "output_options": {

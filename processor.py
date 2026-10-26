@@ -6,6 +6,7 @@ All campus/routing config is driven by config.json.
 import gzip
 import json
 import os
+import fnmatch
 import re
 import xml.etree.ElementTree as ET
 
@@ -15,7 +16,7 @@ import xml.etree.ElementTree as ET
 
 # UI display order — includes both sharp and flat spellings for the dropdown
 # Script version — increment this with every deployment
-SCRIPT_VERSION = "v1.6"
+SCRIPT_VERSION = "v1.7"
 
 KEYS = ["Ab", "A", "A#", "Bb", "B", "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#"]
 
@@ -541,6 +542,18 @@ def route_standard(root, index, children_of, songs, campus_cfg,
             transpose_song(song, new_key, index, children_of, warnings, cfg,
                            next_id_ref, original_warp_state)
 
+    # Global always-mute list (e.g. PIANO) — applies to every campus, in any
+    # category, as long as the track lives inside a (non-ignored) song group.
+    always_mute = {n.upper() for n in cfg.get("always_mute_tracks", [])}
+    if always_mute:
+        for song in songs:
+            if song["ignored"]:
+                continue
+            for desc_id in get_descendants(song["id"], children_of):
+                t = index[desc_id]
+                if t["tag"] != "GroupTrack" and t["name"].upper() in always_mute:
+                    set_mute(t["elem"], warnings, t["name"])
+
 def route_practice(root, index, children_of, songs, transpose_map, warnings, cfg,
                    next_id_ref=None, original_warp_state=None):
     """
@@ -583,6 +596,38 @@ def route_practice(root, index, children_of, songs, transpose_map, warnings, cfg
     unfold_all_tracks(index)
 
 # ---------------------------------------------------------------------------
+# TRACK DELETION
+# ---------------------------------------------------------------------------
+
+def delete_tracks(tracks_elem, patterns, warnings):
+    """
+    Remove tracks whose name matches any pattern (case-insensitive, * wildcards),
+    e.g. ["HELIX*", "SMPTE"]. If a group matches, its children go with it.
+    Returns the list of deleted track names.
+    """
+    pats = [p.upper() for p in patterns]
+    if not pats:
+        return []
+    by_id = {t.get("Id"): t for t in tracks_elem}
+    def matches(t):
+        return any(fnmatch.fnmatchcase(get_name(t).upper(), p) for p in pats)
+    doomed = {tid for tid, t in by_id.items() if matches(t)}
+    # Pull in descendants of any matched group
+    changed = True
+    while changed:
+        changed = False
+        for tid, t in by_id.items():
+            if tid not in doomed and str(get_group_id(t)) in doomed:
+                doomed.add(tid); changed = True
+    deleted = []
+    for tid in doomed:
+        deleted.append(get_name(by_id[tid]))
+        tracks_elem.remove(by_id[tid])
+    if deleted:
+        warnings.append(f"Deleted track(s): {', '.join(sorted(deleted))}")
+    return deleted
+
+# ---------------------------------------------------------------------------
 # MAIN PROCESSING FUNCTION
 # ---------------------------------------------------------------------------
 
@@ -597,9 +642,11 @@ def process_als(als_bytes, campus_key, transpose_map, cfg, practice=False):
     if tracks_elem is None:
         raise ValueError("No <Tracks> element found.")
 
+    campus_cfg = cfg["campuses"][campus_key]
+    delete_tracks(tracks_elem, campus_cfg.get("delete_tracks", []), warnings)
+
     index, children_of = build_track_index(tracks_elem)
     songs = identify_songs(index, children_of, cfg)
-    campus_cfg = cfg["campuses"][campus_key]
 
     # Compute the max existing Id so new WarpMarker elements get unique Ids
     next_id_ref = [get_max_id(root) + 1]
