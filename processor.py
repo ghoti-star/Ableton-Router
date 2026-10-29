@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 
 # UI display order — includes both sharp and flat spellings for the dropdown
 # Script version — increment this with every deployment
-SCRIPT_VERSION = "v1.8"
+SCRIPT_VERSION = "v1.9"
 
 KEYS = ["Ab", "A", "A#", "Bb", "B", "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#"]
 
@@ -181,17 +181,27 @@ def get_descendants(pid, children_of):
     return result
 
 def get_song_timeline_start(tid, children_of, index):
-    """Return the earliest clip start time for any audio clip in this song group."""
-    earliest = float("inf")
+    """
+    Return where this song really starts on the timeline: the start of its
+    LONGEST audio clip (ties → earliest). Using the earliest clip let stray
+    slivers reorder songs (Nov 1: a 0.04-beat BGV leftover at beat 231 put
+    What a Worthy Name ahead of We Praise You).
+    """
+    best_len, best_start = -1.0, float("inf")
     for desc_id in get_descendants(tid, children_of):
         t = index[desc_id]
         if t["tag"] != "AudioTrack":
             continue
         for clip in t["elem"].findall(".//AudioClip"):
             cs = clip.find("CurrentStart")
-            if cs is not None:
-                earliest = min(earliest, float(cs.get("Value", float("inf"))))
-    return earliest if earliest < float("inf") else float("inf")
+            ce = clip.find("CurrentEnd")
+            if cs is None or ce is None:
+                continue
+            start  = float(cs.get("Value"))
+            length = float(ce.get("Value")) - start
+            if length > best_len or (length == best_len and start < best_start):
+                best_len, best_start = length, start
+    return best_start
 
 def identify_songs(index, children_of, cfg):
     ignored = {n.upper() for n in cfg.get("ignored_song_groups", [])}
