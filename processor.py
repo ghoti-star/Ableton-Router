@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 
 # UI display order — includes both sharp and flat spellings for the dropdown
 # Script version — increment this with every deployment
-SCRIPT_VERSION = "v1.7"
+SCRIPT_VERSION = "v1.8"
 
 KEYS = ["Ab", "A", "A#", "Bb", "B", "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#"]
 
@@ -303,125 +303,76 @@ def transpose_song(song, new_key, index, children_of, warnings, cfg,
             # If the clip was ALREADY warped, leave all existing markers untouched —
             # Ableton calibrated them correctly for the song's native tempo.
             if not was_warped:
-                # Get audio duration in seconds from sample data
-                dur_elem = clip.find(".//SampleRef/DefaultDuration")
-                sr_elem  = clip.find(".//SampleRef/DefaultSampleRate")
-                if dur_elem is not None and sr_elem is not None:
-                    dur_secs  = int(dur_elem.get("Value", 0)) / int(sr_elem.get("Value", 48000))
-                    # At session tempo (120 BPM): 1 beat = 0.5s → beats = secs * 2
-                    # But we can derive it from existing warp markers instead,
-                    # which is more reliable than assuming 120 BPM.
-                    # The last warp marker gives us SecTime→BeatTime at tempo.
-                    wmarkers = clip.findall(".//WarpMarker")
-                    if len(wmarkers) >= 2:
-                        last = wmarkers[-2]  # second-to-last is the real end point
-                        last_sec  = float(last.get("SecTime", dur_secs))
-                        last_beat = float(last.get("BeatTime", dur_secs * 2))
-                        # Derive beats per second from the marker
-                        if last_sec > 0:
-                            beats_per_sec = last_beat / last_sec
-                        else:
-                            beats_per_sec = 2.0  # fallback: 120 BPM
-                    else:
-                        beats_per_sec = 2.0  # fallback: 120 BPM
+                # v1.8: convert unwarped → warped using the clip's own geometry.
+                # An unwarped clip plays its audio (LoopStart..LoopEnd, in
+                # SECONDS) at native speed across CurrentStart..CurrentEnd (in
+                # BEATS). So beats-per-second = clip beats / audio seconds, which
+                # always equals the session tempo at that spot. The old warp
+                # markers are NOT reliable for this: unwarped clips usually carry
+                # just a tempo pair 1/32 beat apart, and v1.4–v1.7 mistook the
+                # second one for the end (In Christ Alone, Nov 1: every clip
+                # shrank to 1/32 beat → no waveform).
+                cs_el = clip.find("CurrentStart")
+                ce_el = clip.find("CurrentEnd")
+                ls_el = clip.find("Loop/LoopStart")
+                le_el = clip.find("Loop/LoopEnd")
+                wmarkers_parent = clip.find("WarpMarkers")
+                if None in (cs_el, ce_el, ls_el, le_el, wmarkers_parent):
+                    warnings.append(f"'{song['raw_name']}' → track '{t['name']}': "
+                                    f"left untouched (clip data incomplete).")
+                    continue
+                clip_beats = float(ce_el.get("Value")) - float(cs_el.get("Value"))
+                start_sec  = float(ls_el.get("Value"))
+                end_sec    = float(le_el.get("Value"))
 
-                    dur_beats = dur_secs * beats_per_sec
+                # Skip sub-beat slivers (inaudible leftovers) and anything whose
+                # geometry doesn't make sense — never write a zero-length map.
+                if clip_beats < 1.0 or end_sec <= start_sec:
+                    reason = ("clip shorter than 1 beat" if clip_beats < 1.0
+                              else "clip audio range is empty")
+                    warnings.append(
+                        f"'{song['raw_name']}' → track '{t['name']}': left "
+                        f"untouched ({reason}). Check this clip in Ableton."
+                    )
+                    continue
 
-                    # Gather original markers BEFORE modifying anything —
-                    # we need them to derive both LoopEnd and warp marker endpoints.
-                    wmarkers_parent = clip.find(".//WarpMarkers")
-                    existing = list(wmarkers_parent) if wmarkers_parent is not None else []
+                # Clean 2-point map: audio start → beat 0, audio end → clip length
+                existing      = list(wmarkers_parent)
+                member_indent = existing[0].tail if existing else None
+                close_indent  = wmarkers_parent.text if wmarkers_parent.text else None
+                for wm in existing:
+                    wmarkers_parent.remove(wm)
+                id1 = next_id_ref[0]; next_id_ref[0] += 1
+                id2 = next_id_ref[0]; next_id_ref[0] += 1
+                wm_start = ET.SubElement(wmarkers_parent, "WarpMarker")
+                wm_start.set("Id", str(id1))
+                wm_start.set("SecTime", f"{start_sec:.10f}")
+                wm_start.set("BeatTime", "0")
+                wm_end = ET.SubElement(wmarkers_parent, "WarpMarker")
+                wm_end.set("Id", str(id2))
+                wm_end.set("SecTime", f"{end_sec:.10f}")
+                wm_end.set("BeatTime", f"{clip_beats:.10f}")
+                if member_indent is not None:
+                    wmarkers_parent.text = member_indent
+                    wm_start.tail = member_indent
+                    wm_end.tail   = close_indent
 
-                    # --- Derive start anchor (pre-roll) ---
-                    preroll_secs = 0.0
-                    if existing:
-                        first_sec  = float(existing[0].get("SecTime", "0"))
-                        first_beat = float(existing[0].get("BeatTime", "0"))
-                        if first_beat == 0 and first_sec > 0:
-                            preroll_secs = first_sec
+                # Loop bounds switch from seconds to beats
+                for tag in ["Loop/LoopStart", "Loop/HiddenLoopStart"]:
+                    el = clip.find(tag)
+                    if el is not None:
+                        el.set("Value", "0")
+                for tag in ["Loop/LoopEnd", "Loop/HiddenLoopEnd"]:
+                    el = clip.find(tag)
+                    if el is not None:
+                        el.set("Value", f"{clip_beats:.10f}")
+                sr_el = clip.find("Loop/StartRelative")
+                if sr_el is not None:
+                    sr_el.set("Value", "0")
 
-                    # --- Derive end anchor from original second marker ---
-                    # The second marker is the true musical content end.
-                    # Markers after that are fine quantisation anchors.
-                    if len(existing) >= 2:
-                        end_sec  = float(existing[1].get("SecTime", str(dur_secs)))
-                        end_beat = float(existing[1].get("BeatTime", str(dur_beats)))
-                    else:
-                        end_sec  = dur_secs
-                        end_beat = dur_beats
-
-                    # --- v1.6 safety check ---
-                    # Some unwarped clips store markers as
-                    # [pre-roll at negative beat, anchor at beat 0, +1/32 beat],
-                    # so the "second marker" is the beat-0 anchor, not the end.
-                    # Using it produced a map like (0s→0, 262s→0): infinite
-                    # stretch, which hangs Ableton's offline render (Sep 27
-                    # Bell Shoals freeze at 31%). Also skip sub-beat slivers,
-                    # which are inaudible leftovers and not worth warping.
-                    cs = clip.find("CurrentStart")
-                    ce = clip.find("CurrentEnd")
-                    clip_len = (float(ce.get("Value")) - float(cs.get("Value"))
-                                if cs is not None and ce is not None else None)
-                    bad_map = end_beat <= 0 or end_sec <= preroll_secs
-                    sliver  = clip_len is not None and clip_len < 1.0
-                    if bad_map or sliver:
-                        reason = ("clip shorter than 1 beat" if sliver
-                                  else "warp markers can't be converted safely")
-                        warnings.append(
-                            f"'{song['raw_name']}' → track '{t['name']}': left "
-                            f"untouched ({reason}). Check this clip in Ableton."
-                        )
-                        continue
-
-                    # Update loop bounds for warped playback.
-                    # When unwarped, LoopStart is in SECONDS (file offset).
-                    # When warped, it's in BEATS. The first warp marker already
-                    # anchors the audio at BeatTime=0, so LoopStart must be 0.
-                    for loop_tag in ["Loop/LoopStart", "Loop/HiddenLoopStart"]:
-                        el = clip.find(loop_tag)
-                        if el is not None:
-                            el.set("Value", "0")
-                    # LoopEnd/HiddenLoopEnd: use musical end beat from original markers.
-                    for loop_tag in ["Loop/LoopEnd", "Loop/HiddenLoopEnd"]:
-                        el = clip.find(loop_tag)
-                        if el is not None:
-                            el.set("Value", f"{end_beat:.10f}")
-
-                    # Replace all warp markers with a clean 2-point map.
-                    if wmarkers_parent is not None:
-                        existing = list(wmarkers_parent)  # re-read (same list)
-
-                        # Capture existing indentation
-                        member_indent = existing[0].tail if existing else None
-                        close_indent  = wmarkers_parent.text if wmarkers_parent.text else None
-                        for wm in existing:
-                            wmarkers_parent.remove(wm)
-
-                        # Assign new unique Ids above the file's existing max
-                        id1 = next_id_ref[0]; next_id_ref[0] += 1
-                        id2 = next_id_ref[0]; next_id_ref[0] += 1
-
-                        # Start point — honour the pre-roll offset
-                        wm_start = ET.SubElement(wmarkers_parent, "WarpMarker")
-                        wm_start.set("Id", str(id1))
-                        wm_start.set("SecTime", f"{preroll_secs:.10f}")
-                        wm_start.set("BeatTime", "0")
-                        # End point — use original second marker for musical accuracy
-                        wm_end = ET.SubElement(wmarkers_parent, "WarpMarker")
-                        wm_end.set("Id", str(id2))
-                        wm_end.set("SecTime", f"{end_sec:.10f}")
-                        wm_end.set("BeatTime", f"{end_beat:.10f}")
-
-                        # Restore indentation so each marker is on its own line
-                        if member_indent is not None:
-                            wmarkers_parent.text = member_indent
-                            wm_start.tail = member_indent
-                            wm_end.tail   = close_indent
-
-                        # Tell Ableton these are user-defined markers, not auto-generated
-                        mg = clip.find("MarkersGenerated")
-                        if mg is not None:
-                            mg.set("Value", "false")
+                mg = clip.find("MarkersGenerated")
+                if mg is not None:
+                    mg.set("Value", "false")
 
             if iw is not None:
                 iw.set("Value", "true")
